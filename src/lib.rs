@@ -1,5 +1,5 @@
 use fastembed::{ TextEmbedding, InitOptions, EmbeddingModel };
-use ndarray::{arr1, arr2, Array2};
+use ndarray::Array2;
 use rusqlite::{params, Connection};
 
 fn softmax(arr: Array2<f32>) -> Array2<f32> {
@@ -92,13 +92,13 @@ impl VectorDatabase {
         let _ = self.con.execute("CREATE TABLE IF NOT EXISTS documents(embeddings BLOB, text TEXT)", []);
     }
 
-    pub fn add(&self, embedding: Vec<f32>, text: &str) {
-        let _ = self.con.execute("INSERT INTO documents VALUES(?, ?)", params![to_bytes(&embedding), text]);
+    pub fn add(&self, embedding: &Vec<f32>, text: &str) {
+        let _ = self.con.execute("INSERT INTO documents VALUES(?, ?)", params![to_bytes(embedding), text]);
     }
 
-    pub fn get(&self, embedding: Vec<f32>) -> String {
+    pub fn get(&self, embedding: Array2<f32>) -> String {
         let mut query = self.con.prepare("SELECT text FROM documents WHERE embeddings=(?1)").unwrap();
-        let mut r = query.query([to_bytes(&embedding)]).unwrap();
+        let mut r = query.query([to_bytes(&to_vecf32(embedding)[0])]).unwrap();
 
         while let Some(row) = r.next().unwrap() {
             let t: String = row.get(0).unwrap();
@@ -149,14 +149,14 @@ impl Model {
     pub fn add_documents(&mut self, documents: Vec<&str>) {
         let embeddings = self.model.embed(documents.clone(), None).unwrap();
         for i in 0..embeddings.len() {
-            self.db.add(embeddings[i].clone(), documents[i])
+            self.db.add(&embeddings[i], documents[i]);
         }
         self.net.reinit(self.db.get_all_embeddings());
     }
 
     pub fn search(&mut self, text: &str) -> String{
-        let mut embedding = self.model.embed(vec![text], None).unwrap();
-        embedding = to_vecf32(self.net.converge(to_arr2(embedding)));
-        return self.db.get(embedding[0].clone());
+        let mut embedding = to_arr2(self.model.embed(vec![text], None).unwrap());
+        embedding = self.net.converge(embedding);
+        return self.db.get(embedding);
     }
 }

@@ -102,7 +102,6 @@ impl VectorDatabase {
 
     pub fn get(&self, embedding: &Array2<f32>) -> String {
         let embedding = embedding.row(0).to_vec();
-        println!("{:?}", embedding);
         let mut query = self.con.prepare("SELECT function_name FROM documents WHERE embeddings=(?1)").unwrap();
         let mut r = query.query([to_bytes(&embedding)]).unwrap();
 

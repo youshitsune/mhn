@@ -1,4 +1,5 @@
-use fastembed::{ TextEmbedding, InitOptions, EmbeddingModel };
+pub use fastembed::EmbeddingModel;
+use fastembed::{ TextEmbedding, InitOptions};
 use ndarray::Array2;
 use rusqlite::{params, Connection};
 
@@ -29,7 +30,10 @@ fn to_f32(bytes: &[u8]) -> Vec<f32> {
 }
 
 fn to_arr2(v: Vec<Vec<f32>>) -> Array2<f32> {
-    return Array2::from_shape_vec((v.len(), v[0].len()), v.into_iter().flat_map(|r| r.into_iter()).collect()).unwrap();
+    if v.is_empty() {
+        return Array2::<f32>::zeros((0,0));
+    }
+    return Array2::from_shape_vec((v.len(), v[0].len()), v.into_iter().flat_map(|r| r.into_iter()).collect()).unwrap_or(Array2::<f32>::zeros((0, 0)));
 }
 
 fn to_vecf32(arr: Array2<f32>) -> Vec<Vec<f32>> {
@@ -65,8 +69,8 @@ impl HopfieldNet {
         while &pre != &eps {
             pre = eps.clone();
             eps = self.update_rule(eps)
-
         }
+
         return pre;
     }
     
@@ -96,9 +100,11 @@ impl VectorDatabase {
         let _ = self.con.execute("INSERT INTO documents VALUES(?, ?)", params![to_bytes(embedding), text]);
     }
 
-    pub fn get(&self, embedding: Array2<f32>) -> String {
+    pub fn get(&self, embedding: &Array2<f32>) -> String {
+        let embedding = embedding.row(0).to_vec();
+        println!("{:?}", embedding);
         let mut query = self.con.prepare("SELECT text FROM documents WHERE embeddings=(?1)").unwrap();
-        let mut r = query.query([to_bytes(&to_vecf32(embedding)[0])]).unwrap();
+        let mut r = query.query([to_bytes(&embedding)]).unwrap();
 
         while let Some(row) = r.next().unwrap() {
             let t: String = row.get(0).unwrap();
@@ -128,7 +134,7 @@ impl VectorDatabase {
 
 pub struct Model {
     db: VectorDatabase,
-    net: HopfieldNet,
+    pub net: HopfieldNet,
     model: TextEmbedding
 }
 
@@ -139,7 +145,7 @@ pub fn model_init(db_file: &str, embedding_model: Option<EmbeddingModel>, beta: 
         net: hopfield_net_init(db.get_all_embeddings(), beta),
         db: db,
         model: TextEmbedding::try_new(
-        InitOptions::new(embedding_model.unwrap_or(EmbeddingModel::AllMiniLML6V2Q)).with_show_download_progress(true)).unwrap(),
+        InitOptions::new(embedding_model.unwrap_or(EmbeddingModel::NomicEmbedTextV15Q)).with_show_download_progress(true)).unwrap(),
     };
 
     return model
@@ -154,9 +160,9 @@ impl Model {
         self.net.reinit(self.db.get_all_embeddings());
     }
 
-    pub fn search(&mut self, text: &str) -> String{
+    pub fn search(&mut self, text: &str) -> String {
         let mut embedding = to_arr2(self.model.embed(vec![text], None).unwrap());
         embedding = self.net.converge(embedding);
-        return self.db.get(embedding);
+        return self.db.get(&embedding);
     }
 }

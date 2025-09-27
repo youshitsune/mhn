@@ -93,17 +93,17 @@ pub fn vectordb_init(file: &str) -> VectorDatabase {
 
 impl VectorDatabase {
     pub fn setup(&mut self) {
-        let _ = self.con.execute("CREATE TABLE IF NOT EXISTS documents(embeddings BLOB, text TEXT)", []);
+        let _ = self.con.execute("CREATE TABLE IF NOT EXISTS documents(embeddings BLOB, text TEXT, function_name TEXT)", []);
     }
 
-    pub fn add(&self, embedding: &Vec<f32>, text: &str) {
-        let _ = self.con.execute("INSERT INTO documents VALUES(?, ?)", params![to_bytes(embedding), text]);
+    pub fn add(&self, embedding: &Vec<f32>, text: &str, function_name: &str) {
+        let _ = self.con.execute("INSERT INTO documents VALUES(?, ?, ?)", params![to_bytes(embedding), text, function_name]);
     }
 
     pub fn get(&self, embedding: &Array2<f32>) -> String {
         let embedding = embedding.row(0).to_vec();
         println!("{:?}", embedding);
-        let mut query = self.con.prepare("SELECT text FROM documents WHERE embeddings=(?1)").unwrap();
+        let mut query = self.con.prepare("SELECT function_name FROM documents WHERE embeddings=(?1)").unwrap();
         let mut r = query.query([to_bytes(&embedding)]).unwrap();
 
         while let Some(row) = r.next().unwrap() {
@@ -152,10 +152,10 @@ pub fn model_init(db_file: &str, embedding_model: Option<EmbeddingModel>, beta: 
 }
 
 impl Model {
-    pub fn add_documents(&mut self, documents: Vec<&str>) {
+    pub fn add_documents(&mut self, documents: Vec<&str>, function_names: Vec<&str>) {
         let embeddings = self.model.embed(documents.clone(), None).unwrap();
         for i in 0..embeddings.len() {
-            self.db.add(&embeddings[i], documents[i]);
+            self.db.add(&embeddings[i], documents[i], function_names[i]);
         }
         self.net.reinit(self.db.get_all_embeddings());
     }

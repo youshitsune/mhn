@@ -144,7 +144,7 @@ pub fn model_init(db_file: &str, embedding_model: Option<EmbeddingModel>, beta: 
         net: hopfield_net_init(db.get_all_embeddings(), beta),
         db: db,
         model: TextEmbedding::try_new(
-        InitOptions::new(embedding_model.unwrap_or(EmbeddingModel::NomicEmbedTextV15Q)).with_show_download_progress(true)).unwrap(),
+        InitOptions::new(embedding_model.unwrap_or(EmbeddingModel::AllMiniLML6V2Q)).with_show_download_progress(true)).unwrap(),
     };
 
     return model
